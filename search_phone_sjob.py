@@ -78,51 +78,96 @@ class VacancyParser:
     def find_phone_block(self):
         """Поиск блока с номером телефона на +7 (включая замаскированные с ••••)"""
         try:
+            # Находим позицию блока "Похожие вакансии"
+            similar_block = self.page.locator("xpath=//*[contains(text(), 'Похожие вакансии')]").first
+            similar_y = None
+            
+            if similar_block.count() > 0:
+                try:
+                    similar_box = similar_block.bounding_box()
+                    if similar_box:
+                        similar_y = similar_box['y']
+                except:
+                    pass
+            
             # Сначала ищем замаскированные телефоны (формат: +7 XXX XXX ••••)
             masked_phone_pattern = r'\+7\s*\d{1,3}\s*\d{1,3}\s*•{2,}'
-            
+
             # Ищем элементы с замаскированным телефоном (SuperJob формат)
             masked_selectors = [
-                "xpath=//*[contains(text(), '+7') and contains(text(), '•')]",
-                "xpath=//a[contains(text(), '+7') and contains(text(), '•')]",
+                # Кнопки и ссылки с телефоном (основные селекторы SuperJob)
                 "xpath=//button[contains(text(), '+7') and contains(text(), '•')]",
+                "xpath=//a[contains(text(), '+7') and contains(text(), '•')]",
                 "xpath=//span[contains(text(), '+7') and contains(text(), '•')]",
-                "xpath=//div[contains(text(), '+7') and contains(text(), '•')]"
+                # С классами SuperJob
+                "xpath=//a[contains(@class, 'f-test-link-phone') and contains(text(), '+7')]",
+                "xpath=//a[contains(@class, 'ST2tq') and contains(text(), '+7') and contains(text(), '•')]",
+                "xpath=//button[contains(@class, 'f-test-button-show-phone') and contains(text(), '+7')]",
             ]
-            
+
             for selector in masked_selectors:
                 try:
                     elements = self.page.locator(selector).all()
                     for elem in elements:
                         if elem.is_visible():
+                            # Проверяем позицию элемента - должен быть ВЫШЕ "Похожие вакансии"
+                            if similar_y is not None:
+                                try:
+                                    elem_box = elem.bounding_box()
+                                    if elem_box and elem_box['y'] >= similar_y:
+                                        continue  # Пропускаем элементы в блоке "Похожие вакансии"
+                                except:
+                                    pass
+                            
                             text = elem.text_content() or ''
                             if re.search(masked_phone_pattern, text):
                                 return elem
-                except:
+                            else:
+                                print(f"  [DEBUG] Элемент найден, но текст не подходит: {text[:30]}")
+                except Exception as e:
+                    print(f"  [DEBUG] Ошибка селектора {selector[:50]}...: {e}")
                     continue
-            
+
             # Ищем полные телефоны (если уже раскрыты)
             phone_pattern = r'\+7\s*\d{1,3}\s*\d{1,3}\s*\d{1,4}\s*\d{1,4}'
-            
+
             # Ищем ссылки с tel:
             tel_links = self.page.locator("a[href^='tel:']").all()
             for link in tel_links:
                 if link.is_visible():
+                    # Проверяем позицию
+                    if similar_y is not None:
+                        try:
+                            link_box = link.bounding_box()
+                            if link_box and link_box['y'] >= similar_y:
+                                continue  # Пропускаем элементы в блоке "Похожие вакансии"
+                        except:
+                            pass
+                    
                     href = link.get_attribute('href') or ''
                     if re.search(phone_pattern, href):
                         return link
-            
+
             # Ищем элементы с текстом +7 (полный номер)
             elements = self.page.locator("xpath=//*[contains(text(), '+7')]").all()
             for element in elements:
                 if element.is_visible():
+                    # Проверяем позицию
+                    if similar_y is not None:
+                        try:
+                            elem_box = element.bounding_box()
+                            if elem_box and elem_box['y'] >= similar_y:
+                                continue  # Пропускаем элементы в блоке "Похожие вакансии"
+                        except:
+                            pass
+                    
                     text = element.text_content() or ''
                     if re.search(phone_pattern, text) and '•' not in text:
                         return element
-                        
+
         except Exception as e:
             print(f"Ошибка при поиске блока с телефоном: {e}")
-            
+
         return None
     
     
@@ -160,12 +205,26 @@ class VacancyParser:
                 except:
                     continue
             
-            # Название компании
+            # Название компании (обновленные селекторы для SuperJob)
+            # Ищем элемент с классом _2alGT (border: 1px solid) и берем первый текстовый элемент
             company_selectors = [
+                # SuperJob - элемент с border (класс _2alGT)
+                "xpath=//div[contains(@class, '_2alGT')]//a[3]",
+                "xpath=//div[contains(@class, '_2alGT')]//span[3]",
+                "xpath=//div[contains(@class, '_2alGT')]//*[not(*)][normalize-space(text())][3]",
+                # Альтернативные селекторы для блока _3fYQD
+                "xpath=//div[contains(@class, '_3fYQD')]//a[contains(@href, '/clients/')][1]",
+                "xpath=//div[contains(@class, '_3fYQD')]//a[contains(@href, 'vacancies')][1]",
+                "xpath=//div[contains(@class, '_3fYQD')]//div[contains(@class, '_3YL-9')]//a[1]",
+                "xpath=//div[contains(@class, '_3fYQD')]//div[contains(@class, '_3S0Ir')]//a[1]",
+                # Ссылки с /clients/ (страница компании)
+                "xpath=//a[contains(@href, '/clients/') and contains(@class, 'f-test-link')][1]",
+                "xpath=//a[contains(@href, '/clients/') and not(contains(@href, 'reviews'))][1]",
+                # Старые селекторы (для совместимости)
                 "xpath=//a[contains(@data-qa, 'vacancy-company-name')]",
                 "xpath=//*[contains(@data-qa, 'vacancy-company-name')]",
-                "xpath=//h2[contains(@class, 'company')]//a",  
-                "xpath=//h2[contains(@class, 'company')]",  
+                "xpath=//h2[contains(@class, 'company')]//a",
+                "xpath=//h2[contains(@class, 'company')]",
                 "xpath=//*[contains(@class, 'company')]//a",
                 "xpath=//*[contains(@class, 'employer')]//a",
                 "xpath=//*[contains(@class, 'company')]",
@@ -173,7 +232,7 @@ class VacancyParser:
                 "xpath=//a[contains(@class, 'company')]",
                 "xpath=//span[contains(@class, 'company')]"
             ]
-            
+
             for selector in company_selectors:
                 try:
                     company_elems = self.page.locator(selector).all()
@@ -186,7 +245,9 @@ class VacancyParser:
                                     # Убираем служебные фразы
                                     company_text = re.sub(r'\s*Проверенный работодатель.*$', '', company_text)
                                     company_text = re.sub(r'\s*Клиент.*$', '', company_text)
-                                    if company_text:
+                                    company_text = re.sub(r'\s*Рекрутер.*$', '', company_text)
+                                    # Проверяем, что это не название вакансии
+                                    if company_text.lower() != vacancy_title.lower():
                                         company_name = company_text
                                         break
                     if company_name:
@@ -251,6 +312,8 @@ class VacancyParser:
                                 exp_text = re.sub(r'^[Оо]пыт\s*:?\s*', '', exp_text)
                                 # Берем только часть про опыт (до запятой или точки с запятой)
                                 exp_text = re.split(r'[,;]', exp_text)[0].strip()
+                                if 'div' in exp_text:
+                                    exp_text = ''
                                 if exp_text and len(exp_text) > 1:
                                     experience = exp_text
                                     break
@@ -305,18 +368,32 @@ class VacancyParser:
                     time.sleep(4)  # Увеличено время ожидания модального окна для SuperJob
                     
                     # Извлекаем контакты из модального окна
-                    element = self.page.query_selector(
-                        "xpath=//*[contains(text(), 'Вы обменялись контактами')]/ancestor::*[position()=5]"
-                    )
-
-                    if element:
-                        # Получаем весь текст
-                        full_text = element.inner_text().split('\n')
-                        print(full_text)
-                        name = full_text[1]
-                        phone = full_text[2]
-                        if '+' in full_text[3]:
-                            phone = f'{full_text[2]} , {full_text[3]}'
+                    # Ищем модальное окно по тексту "Вы обменялись контактами"
+                    modal = self.page.locator("xpath=//*[contains(text(), 'Вы обменялись контактами')]/ancestor::div[contains(@class, 'ltQhb')]").first
+                    
+                    if modal.count() > 0:
+                        try:
+                            # Ждем появления модального окна
+                            modal.wait_for(state='visible', timeout=3000)
+                            
+                            # Ищем имя (класс wyL3A или _2Yqdk)
+                            name_elem = modal.locator("xpath=//span[contains(@class, 'wyL3A')]").first
+                            if name_elem.count() > 0 and name_elem.is_visible():
+                                name = (name_elem.text_content() or '').strip()
+                            
+                            # Ищем телефон (ссылка с href="tel:")
+                            phone_elem = modal.locator("xpath=//a[contains(@href, 'tel:')]").first
+                            if phone_elem.count() > 0 and phone_elem.is_visible():
+                                phone = (phone_elem.text_content() or '').strip()
+                            
+                            if phone!='' or name!='' or ('ошибка' not in name and 'контактов' not in name):
+                                print(f"  Контакты: Имя='{name}', Телефон='{phone}'")
+                            else:
+                                print('  Проблемы с контактами')
+                        except Exception as e:
+                            print(f"  Ошибка при извлечении контактов: {e}")
+                    else:
+                        print("  Модальное окно с контактами не найдено")
                     
                     # Закрываем модальное окно (если есть кнопка закрытия)
                     try:
@@ -339,13 +416,15 @@ class VacancyParser:
                                 continue
                     except:
                         pass
-                        
                 except Exception as e:
                     print(f"  Ошибка при клике на блок с телефоном: {e}")
             else:
                 print("  Блок с телефоном не найден")
-            element = self.page.get_by_text("Максимальное количество контактов")
-            if phone and element.count() <= 0:
+                
+            error_inb = lambda x: x not in name.lower()
+            # Проверяем, не превышен ли лимит контактов
+            limit_element = self.page.get_by_text("Максимальное количество контактов")
+            if phone and limit_element.count() == 0 and error_inb('ошибка') and error_inb('контактов') and error_inb('количество'):
                 return {
                     'url': url,
                     'vacancy_title': vacancy_title,
@@ -355,6 +434,9 @@ class VacancyParser:
                     'address': address,
                     'experience': experience
                 }
+            elif limit_element.count() > 0:
+                print("  Превышен лимит контактов")
+                return None
             else:
                 return None
             
