@@ -14,12 +14,12 @@ from openpyxl.styles import Font, Alignment
 
 
 class VacancyParser:
-    def __init__(self, input_file, output_file=None):
+    def __init__(self, input_file, output_file=None, gui_mode=False, stop_callback=None):
         """
         Инициализация парсера
         """
         self.input_file = Path(input_file).resolve()
-        
+
         # Проверяем существование файла
         if not self.input_file.exists():
             raise FileNotFoundError(
@@ -27,19 +27,30 @@ class VacancyParser:
                 f"Текущая директория: {Path.cwd()}\n"
                 f"Попробуйте указать полный путь к файлу."
             )
-        
+
         # Проверяем расширение файла
         if self.input_file.suffix.lower() != '.xlsx':
             raise ValueError(f"Файл должен иметь расширение .xlsx, получен: {self.input_file.suffix}")
-        
+
         if output_file:
             self.output_file = Path(output_file).resolve()
         else:
             # Если выходной файл не указан, создаем его рядом с входным
             self.output_file = self.input_file.parent / f"{self.input_file.stem}_output.xlsx"
-        
+
         self.browser = None
         self.page = None
+        self.gui_mode = gui_mode
+        self.stop_callback = stop_callback  # Callback для проверки остановки
+
+    def is_stopped(self):
+        """Проверка флага остановки (для GUI)"""
+        if self.stop_callback:
+            try:
+                return self.stop_callback()
+            except Exception:
+                return False
+        return False
     
     def read_urls_from_excel(self):
         """Чтение URL из первого столбца Excel файла"""
@@ -342,7 +353,7 @@ class VacancyParser:
                 except PlaywrightTimeoutError:
                     print(f"  Предупреждение: страница загружается медленно, продолжаем...")
                     self.page.goto(url, timeout=20000)
-            time.sleep(2)  # Дополнительная пауза для загрузки
+            time.sleep(0.7)  # Дополнительная пауза для загрузки
             
             # Извлекаем информацию о вакансии с основной страницы
             vacancy_title, company_name, address, experience = self.extract_vacancy_info()
@@ -358,42 +369,60 @@ class VacancyParser:
                 try:
                     phone_text = phone_block.text_content() or phone_block.get_attribute('href') or ''
                     print(f"  Найден блок с телефоном: {phone_text[:30]}, кликаем...")
-                    
+
                     # Прокручиваем к элементу
                     phone_block.scroll_into_view_if_needed()
-                    time.sleep(1)
-                    
+                    time.sleep(0.6)
+
                     # Кликаем на блок с телефоном
                     phone_block.click(timeout=5000)
-                    time.sleep(4)  # Увеличено время ожидания модального окна для SuperJob
                     
-                    # Извлекаем контакты из модального окна
-                    # Ищем модальное окно по тексту "Вы обменялись контактами"
-                    modal = self.page.locator("xpath=//*[contains(text(), 'Вы обменялись контактами')]/ancestor::div[contains(@class, 'ltQhb')]").first
-                    
-                    if modal.count() > 0:
+                    # Ждем появления модального окна с контактами (до 10 секунд)
+                    modal_found = False
+                    for attempt in range(10):
                         try:
-                            # Ждем появления модального окна
-                            modal.wait_for(state='visible', timeout=3000)
+                            # Ищем модальное окно по тексту "Вы обменялись контактами"
+                            modal = self.page.locator("xpath=//*[contains(text(), 'Вы обменялись контактами')]/ancestor::div[contains(@class, 'ltQhb')]").first
+                            if modal.count() > 0:
+                                modal.wait_for(state='visible', timeout=500)
+                                modal_found = True
+                                break
+                        except Exception:
+                            pass
+                        time.sleep(0.5)
+                    
+                    if modal_found:
+                        try:
+                            # Ждем появления телефона (ссылка с href="tel:")
+                            phone_elem = modal.locator("xpath=//a[contains(@href, 'tel:')]").first
+                            
+                            # Ждем до 5 секунд появления телефона
+                            for attempt in range(10):
+                                try:
+                                    if phone_elem.count() > 0 and phone_elem.is_visible():
+                                        phone = (phone_elem.text_content() or '').strip()
+                                        if phone and '+' in phone:
+                                            break
+                                except Exception:
+                                    pass
+                                time.sleep(0.5)
                             
                             # Ищем имя (класс wyL3A или _2Yqdk)
-                            name_elem = modal.locator("xpath=//span[contains(@class, 'wyL3A')]").first
-                            if name_elem.count() > 0 and name_elem.is_visible():
-                                name = (name_elem.text_content() or '').strip()
+                            if not phone:
+                                name_elem = modal.locator("xpath=//span[contains(@class, 'wyL3A')]").first
+                                if name_elem.count() > 0 and name_elem.is_visible():
+                                    name = (name_elem.text_content() or '').strip()
                             
-                            # Ищем телефон (ссылка с href="tel:")
-                            phone_elem = modal.locator("xpath=//a[contains(@href, 'tel:')]").first
-                            if phone_elem.count() > 0 and phone_elem.is_visible():
-                                phone = (phone_elem.text_content() or '').strip()
-                            
-                            if phone!='' or name!='' or ('ошибка' not in name and 'контактов' not in name):
+                            if phone:
+                                print(f"  Контакты: Имя='{name}', Телефон='{phone}'")
+                            elif name and name not in ['ошибка', 'контактов', 'количество']:
                                 print(f"  Контакты: Имя='{name}', Телефон='{phone}'")
                             else:
-                                print('  Проблемы с контактами')
+                                print(f'  Проблемы с контактами (модальное окно найдено, но телефон не появился)')
                         except Exception as e:
                             print(f"  Ошибка при извлечении контактов: {e}")
                     else:
-                        print("  Модальное окно с контактами не найдено")
+                        print("  Модальное окно с контактами не найдено (таймаут ожидания)")
                     
                     # Закрываем модальное окно (если есть кнопка закрытия)
                     try:
@@ -542,22 +571,43 @@ class VacancyParser:
                     return
                 
                 print(f"Найдено {len(urls)} URL для обработки\n")
-                
+
                 results = []
                 for i, url in enumerate(urls, 1):
+                    # Проверяем флаг остановки
+                    if self.is_stopped():
+                        print("\n\nПарсинг остановлен пользователем")
+                        break
+
                     print(f"[{i}/{len(urls)}] ", end="")
                     result = self.parse_vacancy(url)
                     if result:
                         results.append(result)
-                    time.sleep(2)  # Пауза между запросами
-                
+                    time.sleep(1.2)  # Пауза между запросами
+
                 print("\nСохранение результатов...")
-                self.save_to_excel(results)
-                
+                if results:
+                    self.save_to_excel(results)
+                else:
+                    print("Нет результатов для сохранения")
+
             finally:
                 print("\nЗакрытие браузера...")
-                input("Нажмите ENTER для закрытия браузера... ")
-                self.browser.close()
+                if self.gui_mode:
+                    # В режиме GUI закрываем браузер без ожидания
+                    # Браузер может быть уже закрыт через taskkill
+                    try:
+                        if self.browser and self.browser.is_connected():
+                            self.browser.close()
+                            print("Браузер закрыт успешно")
+                        else:
+                            print("Браузер уже закрыт")
+                    except Exception as e:
+                        # Игнорируем ошибки если браузер уже закрыт
+                        print(f"Браузер закрыт (или уже был закрыт): {type(e).__name__}")
+                else:
+                    input("Нажмите ENTER для закрытия браузера... ")
+                    self.browser.close()
 
 
 def main():

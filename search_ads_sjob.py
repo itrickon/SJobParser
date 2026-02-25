@@ -82,6 +82,8 @@ class SearchSuperJob:
         is_filter = re.compile("|".join(filter_patterns))
         # Вакансии имеют ID: slug-51689847.html
         has_vacancy_id = re.compile(r"-\d{6,}\.html")
+        # Фильтр по ключевым словам (исключаем вакансии с этими словами в URL)
+        exclude_words = re.compile(r"voennosluzhaschij|kontrakt", re.IGNORECASE)
 
         seen_urls = set()
         for link in links:
@@ -90,6 +92,9 @@ class SearchSuperJob:
                 if not href:
                     continue
                 if is_filter.search(href) or not has_vacancy_id.search(href):
+                    continue
+                # Исключаем URL с помощью филотрации
+                if exclude_words.search(href):
                     continue
                 # Нормализуем URL (могут быть относительные)
                 if href.startswith("/"):
