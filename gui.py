@@ -34,7 +34,7 @@ class SJobParser(ttk.Frame):
         self.phone_excel_path = None  # Путь к Excel файлу для парсера телефонов
 
         self.source_file_path = "superjob_parse_results/superjob_vacancies.xlsx"
-        self.output_excel = "phones_output.xlsx"
+        self.output_excel = "superjob_parse_results/superjob_vacancies_output.xlsx"
         self.clear_bugs = "sjob_phones_playwright/debug"
  
     def interface_style(self):
@@ -72,7 +72,6 @@ class SJobParser(ttk.Frame):
         menubar.add_cascade(label="Справка", menu=help_menu)
         help_menu.add_command(label="Руководство пользователя", command=self.open_link)
         help_menu.add_command(label="Горячие клавиши", command=self.hotkeys_info)
-        help_menu.add_command(label="Очистить папку 'debug'", command=self.clean_directory_except_py)
         help_menu.add_separator()
         help_menu.add_command(label="О программе", command=self.btn_about)
 
@@ -292,6 +291,11 @@ class SJobParser(ttk.Frame):
         self.excel_file_btn = ttk.Button(self.phone_frame, text="Excel файл после поиска объявлений",
                                         command=self.btn_open, width=32)
         self.excel_file_btn.grid(row=0, column=1, padx=5, pady=0, sticky=tk.W)
+
+        self.continue_btn = ttk.Button(self.phone_frame, text="Вход выполнен", 
+                                        command=self.on_continue_clicked, width=22)
+        self.continue_btn.grid(row=1, column=1, padx=5, pady=0, sticky=tk.W)
+
 
         # Путь к файлу (необязательно, но полезно)
         self.excel_file_path = tk.StringVar()
@@ -609,24 +613,22 @@ class SJobParser(ttk.Frame):
                 self.status_var.set("Ошибка загрузки файла")
                 self.phone_excel_path = None
 
-    def clean_directory_except_py(self):
-        """
-        Удаляет все файлы в указанной директории, кроме .py файлов
-        directory_path (str): Путь к директории для очистки
-        """
-        len_file_bugs = len(os.listdir(self.clear_bugs))
-        for filename in os.listdir(self.clear_bugs):
-            file_path = os.path.join(self.clear_bugs, filename)
-            
-            # Проверяем, что это файл (а не папка) и не .py файл
-            if os.path.isfile(file_path) and not filename.endswith('.py'):
-                os.remove(file_path)
-                print(f"Удален файл: {filename}")
-        self.log_message(f"Список багов в количестве {len_file_bugs} штук успешно удален")
-        self.status_var.set(f"Список багов удален!")
+    def on_continue_clicked(self):
+        """Обработчик нажатия кнопки 'Вход выполнен'"""
+        try:
+            if hasattr(self, 'parser_instance') and self.parser_instance:
+                # Отправляем подтверждение в парсер
+                self.parser_instance.trigger_enter_from_gui()
+                self.log_message("Подтверждение входа отправлено парсеру")
+                self.status_var.set("Парсинг продолжается...")
+            else:
+                self.log_message("Ошибка: парсер не инициализирован")
+        except Exception as e:
+            self.log_message(f"Ошибка отправки подтверждения: {str(e)}")
+
 
     def open_link(self):
-        webbrowser.open("https://github.com/itrickon/sjobParser") 
+        webbrowser.open("https://github.com/itrickon/SJobParser") 
         
     def hotkeys_info(self):
         """Обработчик кнопки 'Горячие клавиши'"""
@@ -696,12 +698,12 @@ class SJobParser(ttk.Frame):
         
         # Добавляем остальной текст
         about_text = [
-        "       sjobParser\n\n",
+        "       SJobParser\n\n",
         "  Данный инструмент предназначен для сбора открытой информации в образовательных и исследовательских целях.\n\n",
-        "    Версия 0.4.1\n\n",
+        "    Версия 0.0.7\n\n",
         "  Режимы работы:\n",
         "    1. Парсер по ключу - поиск организаций по ключевому слову и городу\n",
-        "    2. Парсер по URL - парсинг конкретной страницы поиска sjob\n\n",
+        "    2. Парсер по URL - парсинг конкретной страницы поиска\n\n",
         "  Возможности:\n",
         "    • Поддержка светлой и темной темы\n\n",
         "  Используемые технологии:\n",
@@ -709,7 +711,7 @@ class SJobParser(ttk.Frame):
         "    • Playwright для веб-скрапинга\n",
         "    • tkinter для графического интерфейса\n",
         "    • sv_ttk для современных стилей\n\n",
-        "    https://github.com/itrickon/sjobParser",
+        "    https://github.com/itrickon/SJobParser",
         ]
         
         for city_text in about_text:
