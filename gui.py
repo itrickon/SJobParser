@@ -10,7 +10,7 @@ import tkinter as tk
 from search_phone_sjob import VacancyParser
 from search_ads_sjob import SearchSuperJob
 from async_runner import AsyncParserRunner
-from tkinter import ttk, messagebox, filedialog, IntVar, Toplevel, Text
+from tkinter import ttk, messagebox, filedialog, Toplevel, Text
 
 class SJobParser(ttk.Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -371,9 +371,14 @@ class SJobParser(ttk.Frame):
 
         # Формируем URL для SearchSuperJob
         url = f"https://www.superjob.ru/vacancy/search/?keywords={city}%20{keyword}"
-        
+
         self.is_parsing = True
-        self.parser_instance = SearchSuperJob(url=url, max_vacancies=max_vacancies)
+        # Передаем callback для проверки флага остановки
+        self.parser_instance = SearchSuperJob(
+            url=url,
+            max_vacancies=max_vacancies,
+            stop_callback=lambda: not self.is_parsing
+        )
         self.parser_thread = threading.Thread(
             target=self.run_async_parsing,
             args=(self.parser_instance,),
@@ -400,7 +405,12 @@ class SJobParser(ttk.Frame):
             self.status_var.set(f"Парсинг по URL: {max_vacancies} вакансий")
 
             self.is_parsing = True
-            self.parser_instance = SearchSuperJob(url=url, max_vacancies=max_vacancies)
+            # Передаем callback для проверки флага остановки
+            self.parser_instance = SearchSuperJob(
+                url=url,
+                max_vacancies=max_vacancies,
+                stop_callback=lambda: not self.is_parsing
+            )
             runner = AsyncParserRunner(
                 self.parser_instance,
                 update_callback=self.update_gui_from_thread,
@@ -464,7 +474,7 @@ class SJobParser(ttk.Frame):
             parser_instance.run()
             self.on_parsing_complete(flag=True)
         except Exception as e:
-            self.update_gui_from_thread(f"Ошибка парсинга: {str(e)}")
+            self.update_gui_from_thread(f"Ошибка парсинга: {str(e)[:300]}...")
             self.on_parsing_complete(flag=False)
 
     def on_parsing_complete(self, flag=True):
@@ -702,7 +712,7 @@ class SJobParser(ttk.Frame):
         about_text = [
         "       SJobParser\n\n",
         "  Данный инструмент предназначен для сбора открытой информации в образовательных и исследовательских целях.\n\n",
-        "    Версия 0.1.0\n\n",
+        "    Версия 0.1.1\n\n",
         "  Режимы работы:\n",
         "    1. Парсер по ключу - поиск организаций по ключевому слову и городу\n",
         "    2. Парсер по URL - парсинг конкретной страницы поиска\n\n",
