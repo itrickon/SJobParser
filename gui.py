@@ -17,7 +17,7 @@ class SJobParser(ttk.Frame):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
         self.parent.title("SJobParser")
-        self.parent.geometry("950x700")
+        self.parent.geometry("670x700")
 
         try:
             self.parent.iconbitmap("static/icon.ico")
@@ -59,6 +59,7 @@ class SJobParser(ttk.Frame):
         self.parent.bind("<Control-l>", lambda _: self.clear_log())
         self.parent.bind("<Control-q>", lambda _: self.btn_exit())
         self.parent.bind("<Control-g>", lambda _: self.generate_url())
+        self.parent.bind("<Control-r>", lambda _: self.run_parsing())
         self.parent.bind("<F1>", lambda _: self.open_link())
         parse_menu.add_separator()
         parse_menu.add_command(label="Выход", command=self.btn_exit)
@@ -290,17 +291,17 @@ class SJobParser(ttk.Frame):
 
         self.excel_file_btn = ttk.Button(self.phone_frame, text="Excel файл после поиска объявлений",
                                         command=self.btn_open, width=32)
-        self.excel_file_btn.grid(row=0, column=1, padx=5, pady=0, sticky=tk.W)
+        self.excel_file_btn.grid(row=0, column=1, padx=5, pady=0, sticky=tk.EW)
 
         self.continue_btn = ttk.Button(self.phone_frame, text="Вход выполнен", 
                                         command=self.on_continue_clicked, width=22)
-        self.continue_btn.grid(row=1, column=1, padx=5, pady=0, sticky=tk.W)
+        self.continue_btn.grid(row=1, column=1, padx=5, pady=0, sticky=tk.EW)
 
 
         # Путь к файлу (необязательно, но полезно)
         self.excel_file_path = tk.StringVar()
         ttk.Label(self.phone_frame, textvariable=self.excel_file_path,
-                foreground="gray", wraplength=300).grid(row=0, column=2, padx=(60, 0), pady=0, sticky=tk.W)
+                foreground="gray", wraplength=300).grid(row=0, column=2, padx=5, pady=0, sticky=tk.W)
         
     def toggle_parser_mode(self):
         """Переключение между режимами парсинга"""
@@ -584,9 +585,9 @@ class SJobParser(ttk.Frame):
             
             # Отображаем имя файла в интерфейсе
             file_name = os.path.basename(file_path)
-            if len(file_name) > 22:
+            if len(file_name) > 19:
                 # Обрезаем первые 20 символов, добавляем "...", затем пробел и расширение
-                file_basename = file_name[:17] + "... " + file_name[file_name.rfind('.'):]
+                file_basename = file_name[:14] + "... " + file_name[file_name.rfind('.'):]
             else:
                 file_basename = file_name
             self.excel_file_path.set(f"Выбран: {file_basename}")
@@ -652,6 +653,7 @@ class SJobParser(ttk.Frame):
         "       Горячие клавиши приложения:\n",
         "   Основные операции:\n",
         "     • Ctrl + O   - Открыть Excel файл...\n",
+        "     • Ctrl + R   - Запустить парсинг\n",
         "     • Ctrl + S   - Остановить парсинг\n",
         "     • Ctrl + L   - Очистить лог\n",
         "     • Ctrl + Q   - Выйти из приложения\n",
@@ -700,7 +702,7 @@ class SJobParser(ttk.Frame):
         about_text = [
         "       SJobParser\n\n",
         "  Данный инструмент предназначен для сбора открытой информации в образовательных и исследовательских целях.\n\n",
-        "    Версия 0.0.7\n\n",
+        "    Версия 0.1.0\n\n",
         "  Режимы работы:\n",
         "    1. Парсер по ключу - поиск организаций по ключевому слову и городу\n",
         "    2. Парсер по URL - парсинг конкретной страницы поиска\n\n",
