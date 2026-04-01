@@ -1,0 +1,10 @@
+# GUI
+sv-ttk>=0.10.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# Web scraping / automation
+playwright>=1.40.0
+
+# Data processing
+openpyxl>=3.1.0
