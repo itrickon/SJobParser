@@ -12,7 +12,7 @@ __pycache__/
 # exe files
 _internal
 run_parser.bat
-
+SJobParser.exe
 
 # Distribution / packaging
 .Python

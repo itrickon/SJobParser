@@ -10,14 +10,14 @@ import tkinter as tk
 from search_phone_sjob import VacancyParser
 from search_ads_sjob import SearchSuperJob
 from async_runner import AsyncParserRunner
-from tkinter import ttk, messagebox, filedialog, IntVar, Toplevel, Text
+from tkinter import ttk, messagebox, filedialog, Toplevel, Text
 
 class SJobParser(ttk.Frame):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
         self.parent.title("SJobParser")
-        self.parent.geometry("950x700")
+        self.parent.geometry("670x700")
 
         try:
             self.parent.iconbitmap("static/icon.ico")
@@ -34,7 +34,7 @@ class SJobParser(ttk.Frame):
         self.phone_excel_path = None  # Путь к Excel файлу для парсера телефонов
 
         self.source_file_path = "superjob_parse_results/superjob_vacancies.xlsx"
-        self.output_excel = "phones_output.xlsx"
+        self.output_excel = "superjob_parse_results/superjob_vacancies_output.xlsx"
         self.clear_bugs = "sjob_phones_playwright/debug"
  
     def interface_style(self):
@@ -59,6 +59,7 @@ class SJobParser(ttk.Frame):
         self.parent.bind("<Control-l>", lambda _: self.clear_log())
         self.parent.bind("<Control-q>", lambda _: self.btn_exit())
         self.parent.bind("<Control-g>", lambda _: self.generate_url())
+        self.parent.bind("<Control-r>", lambda _: self.run_parsing())
         self.parent.bind("<F1>", lambda _: self.open_link())
         parse_menu.add_separator()
         parse_menu.add_command(label="Выход", command=self.btn_exit)
@@ -72,7 +73,6 @@ class SJobParser(ttk.Frame):
         menubar.add_cascade(label="Справка", menu=help_menu)
         help_menu.add_command(label="Руководство пользователя", command=self.open_link)
         help_menu.add_command(label="Горячие клавиши", command=self.hotkeys_info)
-        help_menu.add_command(label="Очистить папку 'debug'", command=self.clean_directory_except_py)
         help_menu.add_separator()
         help_menu.add_command(label="О программе", command=self.btn_about)
 
@@ -291,12 +291,17 @@ class SJobParser(ttk.Frame):
 
         self.excel_file_btn = ttk.Button(self.phone_frame, text="Excel файл после поиска объявлений",
                                         command=self.btn_open, width=32)
-        self.excel_file_btn.grid(row=0, column=1, padx=5, pady=0, sticky=tk.W)
+        self.excel_file_btn.grid(row=0, column=1, padx=5, pady=0, sticky=tk.EW)
+
+        self.continue_btn = ttk.Button(self.phone_frame, text="Вход выполнен", 
+                                        command=self.on_continue_clicked, width=22)
+        self.continue_btn.grid(row=1, column=1, padx=5, pady=0, sticky=tk.EW)
+
 
         # Путь к файлу (необязательно, но полезно)
         self.excel_file_path = tk.StringVar()
         ttk.Label(self.phone_frame, textvariable=self.excel_file_path,
-                foreground="gray", wraplength=300).grid(row=0, column=2, padx=(60, 0), pady=0, sticky=tk.W)
+                foreground="gray", wraplength=300).grid(row=0, column=2, padx=5, pady=0, sticky=tk.W)
         
     def toggle_parser_mode(self):
         """Переключение между режимами парсинга"""
@@ -366,9 +371,14 @@ class SJobParser(ttk.Frame):
 
         # Формируем URL для SearchSuperJob
         url = f"https://www.superjob.ru/vacancy/search/?keywords={city}%20{keyword}"
-        
+
         self.is_parsing = True
-        self.parser_instance = SearchSuperJob(url=url, max_vacancies=max_vacancies)
+        # Передаем callback для проверки флага остановки
+        self.parser_instance = SearchSuperJob(
+            url=url,
+            max_vacancies=max_vacancies,
+            stop_callback=lambda: not self.is_parsing
+        )
         self.parser_thread = threading.Thread(
             target=self.run_async_parsing,
             args=(self.parser_instance,),
@@ -395,7 +405,12 @@ class SJobParser(ttk.Frame):
             self.status_var.set(f"Парсинг по URL: {max_vacancies} вакансий")
 
             self.is_parsing = True
-            self.parser_instance = SearchSuperJob(url=url, max_vacancies=max_vacancies)
+            # Передаем callback для проверки флага остановки
+            self.parser_instance = SearchSuperJob(
+                url=url,
+                max_vacancies=max_vacancies,
+                stop_callback=lambda: not self.is_parsing
+            )
             runner = AsyncParserRunner(
                 self.parser_instance,
                 update_callback=self.update_gui_from_thread,
@@ -459,7 +474,7 @@ class SJobParser(ttk.Frame):
             parser_instance.run()
             self.on_parsing_complete(flag=True)
         except Exception as e:
-            self.update_gui_from_thread(f"Ошибка парсинга: {str(e)}")
+            self.update_gui_from_thread(f"Ошибка парсинга: {str(e)[:300]}...")
             self.on_parsing_complete(flag=False)
 
     def on_parsing_complete(self, flag=True):
@@ -580,9 +595,9 @@ class SJobParser(ttk.Frame):
             
             # Отображаем имя файла в интерфейсе
             file_name = os.path.basename(file_path)
-            if len(file_name) > 22:
+            if len(file_name) > 19:
                 # Обрезаем первые 20 символов, добавляем "...", затем пробел и расширение
-                file_basename = file_name[:17] + "... " + file_name[file_name.rfind('.'):]
+                file_basename = file_name[:14] + "... " + file_name[file_name.rfind('.'):]
             else:
                 file_basename = file_name
             self.excel_file_path.set(f"Выбран: {file_basename}")
@@ -609,24 +624,22 @@ class SJobParser(ttk.Frame):
                 self.status_var.set("Ошибка загрузки файла")
                 self.phone_excel_path = None
 
-    def clean_directory_except_py(self):
-        """
-        Удаляет все файлы в указанной директории, кроме .py файлов
-        directory_path (str): Путь к директории для очистки
-        """
-        len_file_bugs = len(os.listdir(self.clear_bugs))
-        for filename in os.listdir(self.clear_bugs):
-            file_path = os.path.join(self.clear_bugs, filename)
-            
-            # Проверяем, что это файл (а не папка) и не .py файл
-            if os.path.isfile(file_path) and not filename.endswith('.py'):
-                os.remove(file_path)
-                print(f"Удален файл: {filename}")
-        self.log_message(f"Список багов в количестве {len_file_bugs} штук успешно удален")
-        self.status_var.set(f"Список багов удален!")
+    def on_continue_clicked(self):
+        """Обработчик нажатия кнопки 'Вход выполнен'"""
+        try:
+            if hasattr(self, 'parser_instance') and self.parser_instance:
+                # Отправляем подтверждение в парсер
+                self.parser_instance.trigger_enter_from_gui()
+                self.log_message("Подтверждение входа отправлено парсеру")
+                self.status_var.set("Парсинг продолжается...")
+            else:
+                self.log_message("Ошибка: парсер не инициализирован")
+        except Exception as e:
+            self.log_message(f"Ошибка отправки подтверждения: {str(e)}")
+
 
     def open_link(self):
-        webbrowser.open("https://github.com/itrickon/sjobParser") 
+        webbrowser.open("https://github.com/itrickon/SJobParser") 
         
     def hotkeys_info(self):
         """Обработчик кнопки 'Горячие клавиши'"""
@@ -650,6 +663,7 @@ class SJobParser(ttk.Frame):
         "       Горячие клавиши приложения:\n",
         "   Основные операции:\n",
         "     • Ctrl + O   - Открыть Excel файл...\n",
+        "     • Ctrl + R   - Запустить парсинг\n",
         "     • Ctrl + S   - Остановить парсинг\n",
         "     • Ctrl + L   - Очистить лог\n",
         "     • Ctrl + Q   - Выйти из приложения\n",
@@ -696,12 +710,12 @@ class SJobParser(ttk.Frame):
         
         # Добавляем остальной текст
         about_text = [
-        "       sjobParser\n\n",
+        "       SJobParser\n\n",
         "  Данный инструмент предназначен для сбора открытой информации в образовательных и исследовательских целях.\n\n",
-        "    Версия 0.4.1\n\n",
+        "    Версия 0.1.3\n\n",
         "  Режимы работы:\n",
         "    1. Парсер по ключу - поиск организаций по ключевому слову и городу\n",
-        "    2. Парсер по URL - парсинг конкретной страницы поиска sjob\n\n",
+        "    2. Парсер по URL - парсинг конкретной страницы поиска\n\n",
         "  Возможности:\n",
         "    • Поддержка светлой и темной темы\n\n",
         "  Используемые технологии:\n",
@@ -709,7 +723,7 @@ class SJobParser(ttk.Frame):
         "    • Playwright для веб-скрапинга\n",
         "    • tkinter для графического интерфейса\n",
         "    • sv_ttk для современных стилей\n\n",
-        "    https://github.com/itrickon/sjobParser",
+        "    https://github.com/itrickon/SJobParser",
         ]
         
         for city_text in about_text:

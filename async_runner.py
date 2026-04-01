@@ -28,7 +28,7 @@ class AsyncParserRunner:
             self.loop.run_until_complete(self._parse())
         except Exception as e:
             if self.update_callback:
-                self.update_callback(f"Ошибка: {str(e)}")
+                self.update_callback(f"Ошибка: {str(e)[:300]}...")
         finally:
             if self.loop and not self.loop.is_closed():
                 self.loop.close()

@@ -12,10 +12,11 @@ from openpyxl import Workbook, load_workbook
 
 
 class SearchSuperJob:
-    def __init__(self, url: str, max_vacancies: int = 100):
+    def __init__(self, url: str, max_vacancies: int = 100, stop_callback=None):
         """
         :param url: URL страницы поиска
         :param max_vacancies: Максимальное количество вакансий для сбора
+        :param stop_callback: Callback для проверки флага остановки
         """
         self.base_url = self._normalize_url(url.rstrip("/"))
         # Убираем page= из URL для формирования пагинации
@@ -27,7 +28,17 @@ class SearchSuperJob:
         self.max_vacancies = max_vacancies
         self.vacancies = []
         self.data_saving = "superjob_parse_results/superjob_vacancies.xlsx"
+        self.stop_callback = stop_callback
         self.warning_message()
+
+    def is_stopped(self):
+        """Проверка флага остановки"""
+        if self.stop_callback:
+            try:
+                return self.stop_callback()
+            except Exception:
+                return False
+        return False
 
     def _normalize_url(self, url: str) -> str:
         """Исправление двойной/некорректной кодировки в URL."""
@@ -173,9 +184,19 @@ class SearchSuperJob:
                 update_callback(msg)
             print(msg)
 
+        # Проверяем флаг остановки перед запуском
+        if self.is_stopped():
+            log("Парсинг отменен пользователем")
+            return
+
         self._create_xlsx()
 
         async with async_playwright() as playwright:
+            # Проверяем флаг остановки после создания playwright
+            if self.is_stopped():
+                log("Парсинг отменен пользователем")
+                return
+
             browser = await playwright.chromium.launch(headless=False)
             context = await browser.new_context()
             self.page = await context.new_page()
@@ -193,6 +214,11 @@ class SearchSuperJob:
                 empty_pages = 0
 
                 while len(self.vacancies) < self.max_vacancies:
+                    # Проверяем флаг остановки перед каждой итерацией
+                    if self.is_stopped():
+                        log("Парсинг остановлен пользователем")
+                        break
+
                     log(f"Парсинг страницы {page_num}...")
                     page_vacancies = await self._get_vacancies_from_page()
 

@@ -7,6 +7,7 @@
 import time
 import re
 import sys
+import threading
 from pathlib import Path
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from openpyxl import load_workbook, Workbook
@@ -41,7 +42,10 @@ class VacancyParser:
         self.browser = None
         self.page = None
         self.gui_mode = gui_mode
+        self.gui_works = gui_mode  # Для совместимости с trigger_enter_from_gui
         self.stop_callback = stop_callback  # Callback для проверки остановки
+        # Событие для ожидания Enter из GUI
+        self.enter_event = threading.Event() if gui_mode else None
 
     def is_stopped(self):
         """Проверка флага остановки (для GUI)"""
@@ -481,6 +485,13 @@ class VacancyParser:
                 'experience': ''
             }
     
+    def trigger_enter_from_gui(self):
+        """Вызывается из GUI для имитации нажатия Enter"""
+        if self.gui_works and self.enter_event:
+            print("GUI: Вход подтвержден, устанавливаем событие Enter")
+            self.enter_event.set()
+            print(f"GUI: Событие установлено, is_set={self.enter_event.is_set()}")
+    
     def save_to_excel(self, data):
         """Сохранение данных в Excel файл"""
         wb = Workbook()
@@ -545,22 +556,28 @@ class VacancyParser:
             )
             
             self.page = context.new_page()
-            
+
             try:
                 # Открываем страницу SuperJob для входа в аккаунт
                 print("\n" + "="*60)
                 print("Открываю страницу SuperJob для входа в аккаунт...")
                 print("="*60)
                 self.page.goto("https://ramenskoe.superjob.ru/?curtain%5BreturnUrl%5D=%2F&curtain%5BrouteName%5D=authLogin&curtain%5Bid%5D=auth", wait_until='domcontentloaded', timeout=30000)
-                
+
                 print("\nВАЖНО: Войдите в свой аккаунт SuperJob в открывшемся браузере")
-                print("   После входа в аккаунт вернитесь сюда и нажмите ENTER для продолжения...")
-                print("   (У вас есть неограниченное время для входа)\n")
                 
                 # Ждем нажатия Enter от пользователя
-                input("Нажмите ENTER после входа в аккаунт для начала парсинга... ")
-                
-                print("\n Вход подтвержден. Начинаю парсинг...\n")
+                if self.gui_mode:
+                    print("   После входа в аккаунт нажмите кнопку 'Вход выполнен' в GUI")
+                    print("   (У вас есть неограниченное время для входа)\n")
+                    self.enter_event.wait()  # Ждем события от GUI
+                    self.enter_event.clear()  # Сбрасываем для следующего использования
+                    print("\n Вход подтвержден через GUI. Начинаю парсинг...\n")
+                else:
+                    print("   После входа в аккаунт вернитесь сюда и нажмите ENTER для продолжения...")
+                    print("   (У вас есть неограниченное время для входа)\n")
+                    input("Нажмите ENTER после входа в аккаунт для начала парсинга... ")
+                    print("\n Вход подтвержден. Начинаю парсинг...\n")
                 
                 # Читаем URL из файла
                 print("Чтение URL из файла...")
